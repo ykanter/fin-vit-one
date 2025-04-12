@@ -9,8 +9,8 @@ function App() {
 
   return (
     <>
-      <h1>WELCOME</h1>
-      <div className="card">
+      <h1 className="text-4xl font-bold text-center mb-6 text-indigo-600">WELCOME</h1>
+      <div className="card bg-white rounded-lg shadow-md p-6 max-w-md mx-auto">
         <img
           src="https://imagedelivery.net/VDD55Z4OpiL36ObjDMEizQ/e790e50f-20c3-4c64-8cb8-6efaa6b43700/public"
           alt="Bora bora"
@@ -25,7 +25,7 @@ function App() {
           Edit <code>src/App.tsx</code> and save to test HMR
         </p>
       </div>
-      <div className="card">
+      <div className="card bg-white rounded-lg shadow-md p-6 max-w-md mx-auto">
         <button
           onClick={() => {
             fetch("/api/")
@@ -40,7 +40,7 @@ function App() {
           Edit <code>worker/index.ts</code> to change the name
         </p>
       </div>
-      <p className="read-the-docs">Click on the logos to learn more</p>
+      
     </>
   );
 }
