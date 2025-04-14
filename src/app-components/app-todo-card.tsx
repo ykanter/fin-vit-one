@@ -8,7 +8,7 @@ export default function TodoCard({todo}: {todo: Todo}){
                 <span className={todo.is_completed ? "text-slate-300" : ""}>{todo.body}</span>
             </div>
             <div className="flex items-center justify-center gap-2">
-                <button className="bg-slate-100 p-2 rounded-sm hover:bg-slate-200 hover:cursor-pointer">Edit</button>
+                <button className="bg-blue-100 p-2 rounded-sm hover:bg-blue-200 hover:cursor-pointer">Edit</button>
                 <button className="bg-amber-500 p-2 rounded-sm hover:bg-amber-600 hover:cursor-pointer">Delete</button>
             </div>
         </div>
