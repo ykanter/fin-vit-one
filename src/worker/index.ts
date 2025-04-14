@@ -5,7 +5,8 @@ import type { Todo } from "../interfaces/todo-interface";
 const app = new Hono<{ Bindings: Env }>();
 
 app.get("/api/", async (c : Context<{ Bindings: Env }>) => {
-   const connectionString = c.env.hyper.connectionString;
+   //const connectionString = c.env.hyper.connectionString;
+   const connectionString = "postgresql://neondb_owner:npg_3rjfOClvGP2V@ep-wandering-sun-a5pta77k-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require"
    
    const sql = postgres(connectionString, {
         // Workers limit the number of concurrent external connections, so be sure to limit

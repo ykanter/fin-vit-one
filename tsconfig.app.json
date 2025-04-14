@@ -22,5 +22,10 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src/react-app", "src/app-components", "src/interfaces"]
+  "include": [
+    "src/react-app", 
+    "src/app-components", 
+    "src/interfaces", 
+    "src/routes"
+  ]
 }
