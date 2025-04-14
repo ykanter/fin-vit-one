@@ -10,5 +10,12 @@
   "upload_source_maps": true,
   "assets": {
     "not_found_handling": "single-page-application"
-  }
+  },
+  "hyperdrive": [
+    {
+      "binding": "hyper",
+      "id": "63e8cb642e534d8d920e440fff88ba83",
+      "localConnectionString": "postgresql://neondb_owner:npg_3rjfOClvGP2V@ep-wandering-sun-a5pta77k-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require"
+    }
+  ]
 }

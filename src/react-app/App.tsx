@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import "./App.css";
-
+import type { Todo } from "../interfaces/todo-interface";
 function App() {
   const [count, setCount] = useState(0);
-  const [name, setName] = useState("unknown");
+  const [todos, setTodos] = useState<Todo[]>([]);
 
   return (
     <>
@@ -21,26 +21,29 @@ function App() {
         >
           count is {count}
         </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
       </div>
-      <div className="card bg-white rounded-lg shadow-md p-6 max-w-md mx-auto">
+      <div className="bg-white rounded-lg shadow-md p-6 max-w-md mx-auto">
         <button
           onClick={() => {
             fetch("/api/")
-              .then((res) => res.json() as Promise<{ name: string }>)
-              .then((data) => setName((_name) => data.name));
+              .then((res) => res.json() as Promise<Todo[]>)
+              .then((data) => setTodos((_todos) => data));
           }}
-          aria-label="get name"
+          aria-label="get todos"
         >
-          Name from API is: {name}
+         Get my todo list
         </button>
-        <p>
-          Edit <code>worker/index.ts</code> to change the name
-        </p>
+        <ul className="space-y-2">
+          {todos.map((todo) => (
+            <li key={todo.id}>
+              <div className="flex gap-2">
+                <input type="checkbox" checked={todo.is_completed} />
+                <span className={todo.is_completed ? "line-through" : ""}>{todo.body}</span>
+              </div>
+            </li>
+          ))}
+        </ul>
       </div>
-      
     </>
   );
 }
