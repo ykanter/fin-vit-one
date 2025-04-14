@@ -1,3 +1,5 @@
+# Configuration and Setup
+
 ## Configure tailwindcss
 https://tailwindcss.com/docs/installation/using-vite    
 
@@ -49,8 +51,8 @@ https://tailwindcss.com/docs/installation/using-vite
    </div>
    ```
 
-   ## Local connection setup issues for cf hyperdrive
-   In my @index.ts file I output the connectionString to consolole. When I run pnpm run preview, which maps to pnpm run build && vite preview and look my console I see: Current Connection String : postgresql://neondb_owner:npg_3rjfOClvGP2V@366f0f3cd7329af38bf0d630e84a8e3c.hyperdrive.local:5432/neondb?sslmode=disable,
+## Local connection setup issues for cf hyperdrive
+In my @index.ts file I output the connectionString to console. When I run pnpm run preview, which maps to pnpm run build && vite preview and look my console I see: Current Connection String : postgresql://neondb_owner:npg_3rjfOClvGP2V@366f0f3cd7329af38bf0d630e84a8e3c.hyperdrive.local:5432/neondb?sslmode=disable,
 which is really odd, since in wrangler.jsonc file I clearly state:
   "hyperdrive": [
     {
@@ -118,3 +120,115 @@ The connection string you're seeing with `wrangler dev --remote` is expected beh
 5. **Best Practice for Development**: Using `wrangler dev --remote` is actually the recommended approach for developing applications that use Hyperdrive, as it provides the most accurate simulation of how your application will behave in production. The tradeoff is that it requires an internet connection and counts against your Cloudflare resource usage.
 
 This approach aligns with the memory we have about solving similar issues, where the solution was to detect the environment and use the appropriate connection method based on whether the application is running locally or in production.
+
+## Add tanstack router 
+https://tanstack.com/router/latest/docs/framework/react/installation
+
+### Steps summary:
+
+1. **Install TanStack Router and related packages**
+   ```bash
+   pnpm add @tanstack/react-router
+   pnpm add -D @tanstack/router-plugin @tanstack/react-router-devtools
+   ```
+
+2. **Configure the Vite Plugin**
+   Add the TanStack Router Vite plugin to your Vite configuration (vite.config.ts):
+   ```typescript
+   import { defineConfig } from 'vite'
+   import react from '@vitejs/plugin-react'
+   import { TanStackRouterVite } from '@tanstack/router-plugin/vite'
+
+   export default defineConfig({
+     plugins: [
+       // Important: TanStackRouterVite must come before react plugin
+       TanStackRouterVite({ target: 'react', autoCodeSplitting: true }),
+       react(),
+       // other plugins...
+     ],
+   })
+   ```
+
+3. **Create the basic route files structure**
+   ```
+   src/routes/
+   ├── __root.tsx        # Root layout component with navigation
+   ├── index.tsx         # Home page route
+   └── about.tsx         # Example additional route
+   ```
+
+4. **Define the root route** in `src/routes/__root.tsx`:
+   ```tsx
+   import { createRootRoute, Link, Outlet } from '@tanstack/react-router'
+   import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
+
+   export const Route = createRootRoute({
+     component: () => (
+       <>
+         <div className="p-2 flex gap-2">
+           <Link to="/" className="[&.active]:font-bold">Home</Link>
+           <Link to="/about" className="[&.active]:font-bold">About</Link>
+         </div>
+         <hr />
+         <Outlet />
+         {process.env.NODE_ENV === 'development' && <TanStackRouterDevtools />}
+       </>
+     ),
+   })
+   ```
+
+5. **Create route components** for each page
+   Example for `src/routes/index.tsx` (home page):
+   ```tsx
+   import { createLazyFileRoute } from '@tanstack/react-router'
+
+   export const Route = createLazyFileRoute('/')({ 
+     component: Index,
+   })
+
+   function Index() {
+     return (
+       <div className="p-2">
+         <h3>Welcome Home!</h3>
+       </div>
+     )
+   }
+   ```
+
+6. **Set up the router in your main entry file** (e.g., `src/main.tsx`):
+   ```tsx
+   import { StrictMode } from 'react'
+   import ReactDOM from 'react-dom/client'
+   import { RouterProvider, createRouter } from '@tanstack/react-router'
+
+   // Import the generated route tree (created automatically by the plugin)
+   import { routeTree } from './routeTree.gen'
+
+   // Create a new router instance
+   const router = createRouter({ routeTree })
+
+   // Register router for type safety
+   declare module '@tanstack/react-router' {
+     interface Register {
+       router: typeof router
+     }
+   }
+
+   // Render the app
+   const rootElement = document.getElementById('root')!
+   if (!rootElement.innerHTML) {
+     const root = ReactDOM.createRoot(rootElement)
+     root.render(
+       <StrictMode>
+         <RouterProvider router={router} />
+       </StrictMode>
+     )
+   }
+   ```
+
+7. **Run the development server**
+   ```bash
+   pnpm wrangler dev
+   ```
+   The router plugin will automatically generate the route tree file (`src/routeTree.gen.ts`) based on your route files.
+
