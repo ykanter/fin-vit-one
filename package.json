@@ -44,6 +44,7 @@
     "dev": "vite",
     "lint": "eslint .",
     "preview": "pnpm run build && vite preview",
+    "remote": "pnpm run build && wrangler dev --remote",
     "types": "wrangler types"
   },
   "type": "module"
