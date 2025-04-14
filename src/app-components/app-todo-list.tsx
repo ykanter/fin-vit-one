@@ -1,4 +1,5 @@
 import type { Todo } from "../interfaces/todo-interface";
+import TodoCard from "./app-todo-card";
 
 export default function TodoList({todos}: {todos: Todo[]}){
     return (
@@ -6,10 +7,7 @@ export default function TodoList({todos}: {todos: Todo[]}){
         <ul className="space-y-2">
           {todos.map((todo) => (
             <li key={todo.id}>
-              <div className="flex gap-2">
-                <input type="checkbox" checked={todo.is_completed} />
-                <span className={todo.is_completed ? "line-through" : ""}>{todo.body}</span>
-              </div>
+              <TodoCard todo={todo} />
             </li>
           ))}
         </ul>
