@@ -1,29 +1,33 @@
 import type { Todo } from "../interfaces/todo-interface";
 import TodoCard from "./app-todo-card";
-import { useState } from "react";
 
-export default function TodoList(){
-    const [todos, setTodos] = useState<Todo[]>([]);
+export const readTodos = async () => {
+    const response = await fetch("/api/");
+    return await response.json() as Promise<Todo[]>;
+}
+
+export const createTodos = async (todos : Todo[]) => {
+    const response = await fetch("/api/", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify(todos),
+    });
+    return await response.json() as Promise<Todo[]>;
+}
+export default function TodoList({todos}: {todos: Todo[]}){
     return (
-      <>
-      <div className="bg-white rounded-lg shadow-md p-6 max-w-md mx-auto flex flex-col justify-center gap-4">
-      <button
-        onClick={() => {
-          fetch("/api/")
-            .then((res) => res.json() as Promise<Todo[]>)
-            .then((data) => setTodos(() => data));
-        }}
-        aria-label="get todos"
-        className="bg-slate-100 p-2 rounded-sm hover:bg-slate-200 hover:cursor-pointer"
-      >
-       Get my todo list
-      </button>
-      </div>
+      <> 
+      <h1 className="flex justify-center mt-4"> Todo List </h1>
+      <div className="w-[90vw] mx-auto bg-white rounded-lg shadow-md p-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+        
       {todos.map((todo) => (
             
-              <TodoCard key={todo.id} todo={todo} />
-            
-          ))}
+            <TodoCard key={todo.id} todo={todo} />
+          
+        ))}
+      </div>
       </>
     )
 }
