@@ -4,7 +4,7 @@ import { RouterProvider, createRouter } from '@tanstack/react-router'
 import './index.css'
 
 // Import the generated route tree (created automatically by the plugin)
-import { routeTree } from '../routeTree.gen'
+import { routeTree } from './routeTree.gen'
 
 // Create a new router instance
 const router = createRouter({ routeTree })
