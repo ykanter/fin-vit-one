@@ -1,10 +1,6 @@
 // src/app-components/app-home.tsx
 
-import { useState } from "react";
-import TodoList from "./app-todo-list"
 function AppHome() {
-  const [count, setCount] = useState(0);
-
   return (
     <div className="flex flex-col w-full items-center justify-center gap-4 mt-4">
       <h1 className="text-4xl font-bold text-center mb-6 text-indigo-600">WELCOME</h1>
@@ -14,15 +10,8 @@ function AppHome() {
           alt="Bora bora"
           className="rounded-md mb-2"
         />
-        <button
-          onClick={() => setCount((count) => count + 1)}
-          aria-label="increment"
-          className="bg-slate-100 p-2 rounded-sm hover:bg-slate-200 hover:cursor-pointer"
-        >
-          count is {count}
-        </button>
+
       </div>
-      <TodoList />
     </div>
   );
 }
