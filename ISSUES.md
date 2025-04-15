@@ -260,14 +260,22 @@ After analyzing the project structure, here's a comprehensive plan for keeping t
    - Add optimistic UI updates for a smoother user experience
 
 5. **Specific implementation steps**:
-   - Install required packages: `pnpm add @tanstack/react-query`
+   - Install required packages: `pnpm add @tanstack/react-query @tanstack/react-query-devtools`
    - Set up Query Client Provider in the application root:
    ```tsx
    // src/main.tsx or equivalent entry point
    import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
    import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
    
-   const queryClient = new QueryClient()
+   // Create a client with default or custom options
+   const queryClient = new QueryClient({
+     defaultOptions: {
+       queries: {
+         staleTime: 1000 * 60 * 5, // 5 minutes
+         refetchOnWindowFocus: false,
+       },
+     },
+   })
    
    // Wrap app with QueryClientProvider
    root.render(
@@ -288,8 +296,9 @@ After analyzing the project structure, here's a comprehensive plan for keeping t
    
    type TodoContextType = {
      todos: Todo[]
-     isLoading: boolean
+     isPending: boolean
      isError: boolean
+     error: Error | null
      addTodo: (todo: Omit<Todo, 'id'>) => Promise<Todo>
      updateTodo: (todo: Todo) => Promise<Todo>
      deleteTodo: (id: string) => Promise<void>
@@ -322,7 +331,7 @@ After analyzing the project structure, here's a comprehensive plan for keeping t
    import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
    import { Todo } from '../interfaces/todo-interface'
    
-   // API functions
+   // API functions - specialized for Cloudflare Workers environment
    const fetchTodos = async (): Promise<Todo[]> => {
      const response = await fetch('/api/')
      if (!response.ok) throw new Error('Failed to fetch todos')
@@ -357,32 +366,98 @@ After analyzing the project structure, here's a comprehensive plan for keeping t
    
    export function useTodos() {
      const queryClient = useQueryClient()
+     
+     // Main query to fetch todos
      const todosQuery = useQuery({
        queryKey: ['todos'],
        queryFn: fetchTodos,
      })
      
+     // Optimistic update helpers
+     const optimisticlyAddTodo = (newTodo: Omit<Todo, 'id'>) => {
+       // Generate temporary ID for optimistic update
+       const tempId = `temp-${Date.now()}`
+       const optimisticTodo = { ...newTodo, id: tempId }
+       
+       // Add to cache optimistically
+       queryClient.setQueryData(['todos'], (old: Todo[] | undefined) => {
+         return [...(old || []), optimisticTodo]
+       })
+       
+       return { tempId }
+     }
+     
+     // Add Todo Mutation
      const addTodoMutation = useMutation({
        mutationFn: createTodo,
-       onSuccess: () => {
+       onMutate: optimisticlyAddTodo,
+       onError: (error, variables, context) => {
+         // Rollback on error
+         if (context?.tempId) {
+           queryClient.setQueryData(['todos'], (old: Todo[] | undefined) => {
+             return (old || []).filter(todo => todo.id !== context.tempId)
+           })
+         }
+       },
+       onSettled: () => {
+         // Always refetch after error or success
          queryClient.invalidateQueries({ queryKey: ['todos'] })
        },
      })
      
+     // Update Todo Mutation with optimistic updates
      const updateTodoMutation = useMutation({
        mutationFn: updateTodoApi,
-       onSuccess: () => {
+       onMutate: (updatedTodo) => {
+         // Save previous todos
+         const previousTodos = queryClient.getQueryData(['todos'])
+         
+         // Optimistically update the cache
+         queryClient.setQueryData(['todos'], (old: Todo[] | undefined) => {
+           return (old || []).map(todo => 
+             todo.id === updatedTodo.id ? updatedTodo : todo
+           )
+         })
+         
+         return { previousTodos }
+       },
+       onError: (error, variables, context) => {
+         // Rollback on error
+         if (context?.previousTodos) {
+           queryClient.setQueryData(['todos'], context.previousTodos)
+         }
+       },
+       onSettled: () => {
          queryClient.invalidateQueries({ queryKey: ['todos'] })
        },
      })
      
+     // Delete Todo Mutation with optimistic updates
      const deleteTodoMutation = useMutation({
        mutationFn: deleteTodoApi,
-       onSuccess: () => {
+       onMutate: (id) => {
+         // Save previous todos
+         const previousTodos = queryClient.getQueryData(['todos'])
+         
+         // Optimistically remove from cache
+         queryClient.setQueryData(['todos'], (old: Todo[] | undefined) => {
+           return (old || []).filter(todo => todo.id !== id)
+         })
+         
+         return { previousTodos }
+       },
+       onError: (error, variables, context) => {
+         // Rollback on error
+         if (context?.previousTodos) {
+           queryClient.setQueryData(['todos'], context.previousTodos)
+         }
+       },
+       onSettled: () => {
          queryClient.invalidateQueries({ queryKey: ['todos'] })
        },
      })
      
+     // Helper function for toggling todo completion
      const toggleComplete = async (id: string, isCompleted: boolean) => {
        const todoToUpdate = todosQuery.data?.find(todo => todo.id === id)
        if (!todoToUpdate) throw new Error('Todo not found')
@@ -395,8 +470,9 @@ After analyzing the project structure, here's a comprehensive plan for keeping t
      
      return {
        todos: todosQuery.data || [],
-       isLoading: todosQuery.isLoading,
+       isPending: todosQuery.isPending,
        isError: todosQuery.isError,
+       error: todosQuery.error,
        addTodo: addTodoMutation.mutateAsync,
        updateTodo: updateTodoMutation.mutateAsync,
        deleteTodo: deleteTodoMutation.mutateAsync,
@@ -431,20 +507,24 @@ After analyzing the project structure, here's a comprehensive plan for keeping t
    import { useTodoContext } from '../contexts/todo-context'
    
    export default function TodoList() {
-     const { todos, isLoading, isError } = useTodoContext()
+     const { todos, isPending, isError, error } = useTodoContext()
      
-     if (isLoading) return <div className="text-center p-4">Loading todos...</div>
-     if (isError) return <div className="text-center p-4 text-red-500">Error loading todos!</div>
+     if (isPending) return <div className="text-center p-4">Loading todos...</div>
+     if (isError) return <div className="text-center p-4 text-red-500">Error loading todos: {error?.message}</div>
      
      return (
        <> 
          <h1 className="flex justify-center mt-4">Todo List</h1>
          <NewTodoCard />
-         <div className="w-[90vw] mx-auto bg-white rounded-lg shadow-md p-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-           {todos.map((todo) => (
-             <TodoCard key={todo.id} todo={todo} />
-           ))}
-         </div>
+         {todos.length === 0 ? (
+           <div className="text-center p-4 text-gray-500">No todos yet. Create one above!</div>
+         ) : (
+           <div className="w-[90vw] mx-auto bg-white rounded-lg shadow-md p-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+             {todos.map((todo) => (
+               <TodoCard key={todo.id} todo={todo} />
+             ))}
+           </div>
+         )}
        </>
      )
    }
@@ -460,20 +540,49 @@ After analyzing the project structure, here's a comprehensive plan for keeping t
      const { updateTodo, deleteTodo, toggleComplete } = useTodoContext()
      const [isEditing, setIsEditing] = useState(false)
      const [editedBody, setEditedBody] = useState(todo.body)
+     const [isUpdating, setIsUpdating] = useState(false)
+     const [isDeleting, setIsDeleting] = useState(false)
      
-     const handleToggleComplete = () => {
-       toggleComplete(todo.id, !todo.is_completed)
+     const handleToggleComplete = async () => {
+       try {
+         await toggleComplete(todo.id, !todo.is_completed)
+       } catch (error) {
+         console.error('Failed to toggle todo completion:', error)
+       }
      }
      
-     const handleDelete = () => {
-       deleteTodo(todo.id)
+     const handleDelete = async () => {
+       try {
+         setIsDeleting(true)
+         await deleteTodo(todo.id)
+       } catch (error) {
+         console.error('Failed to delete todo:', error)
+       } finally {
+         setIsDeleting(false)
+       }
      }
      
-     const handleEdit = () => {
+     const handleEdit = async () => {
        if (isEditing) {
-         updateTodo({ ...todo, body: editedBody })
+         try {
+           setIsUpdating(true)
+           await updateTodo({ ...todo, body: editedBody })
+         } catch (error) {
+           console.error('Failed to update todo:', error)
+         } finally {
+           setIsUpdating(false)
+         }
        }
        setIsEditing(!isEditing)
+     }
+     
+     const handleKeyDown = (e: React.KeyboardEvent) => {
+       if (e.key === 'Enter') {
+         handleEdit()
+       } else if (e.key === 'Escape') {
+         setIsEditing(false)
+         setEditedBody(todo.body) // Reset to original value
+       }
      }
      
      return (
@@ -483,13 +592,16 @@ After analyzing the project structure, here's a comprehensive plan for keeping t
              type="checkbox" 
              checked={todo.is_completed} 
              onChange={handleToggleComplete}
+             disabled={todo.id.startsWith('temp-')} // Disable during optimistic update
            />
            {isEditing ? (
              <input 
                type="text" 
                value={editedBody} 
                onChange={(e) => setEditedBody(e.target.value)}
+               onKeyDown={handleKeyDown}
                className="w-full border p-1 rounded"
+               autoFocus
              />
            ) : (
              <span className={todo.is_completed ? "text-slate-300" : ""}>{todo.body}</span>
@@ -497,16 +609,18 @@ After analyzing the project structure, here's a comprehensive plan for keeping t
          </div>
          <div className="flex items-center justify-center gap-2">
            <button 
-             className="bg-blue-100 p-2 rounded-sm hover:bg-blue-200 hover:cursor-pointer"
+             className={`bg-blue-100 p-2 rounded-sm hover:bg-blue-200 hover:cursor-pointer ${isUpdating ? 'opacity-50' : ''}`}
              onClick={handleEdit}
+             disabled={isUpdating}
            >
-             {isEditing ? 'Save' : 'Edit'}
+             {isEditing ? (isUpdating ? 'Saving...' : 'Save') : 'Edit'}
            </button>
            <button 
-             className="bg-amber-500 p-2 rounded-sm hover:bg-amber-600 hover:cursor-pointer"
+             className={`bg-amber-500 p-2 rounded-sm hover:bg-amber-600 hover:cursor-pointer ${isDeleting ? 'opacity-50' : ''}`}
              onClick={handleDelete}
+             disabled={isDeleting}
            >
-             Delete
+             {isDeleting ? 'Deleting...' : 'Delete'}
            </button>
          </div>
        </div>
@@ -522,11 +636,13 @@ After analyzing the project structure, here's a comprehensive plan for keeping t
    export default function NewTodoCard() {
      const { addTodo } = useTodoContext()
      const [todoBody, setTodoBody] = useState('')
+     const [isAdding, setIsAdding] = useState(false)
      
      const handleAddTodo = async () => {
-       if (!todoBody.trim()) return
+       if (!todoBody.trim() || isAdding) return
        
        try {
+         setIsAdding(true)
          await addTodo({
            body: todoBody,
            is_completed: false
@@ -534,11 +650,19 @@ After analyzing the project structure, here's a comprehensive plan for keeping t
          setTodoBody('') // Clear input after successful add
        } catch (error) {
          console.error('Failed to add todo:', error)
+       } finally {
+         setIsAdding(false)
+       }
+     }
+     
+     const handleKeyDown = (e: React.KeyboardEvent) => {
+       if (e.key === 'Enter') {
+         handleAddTodo()
        }
      }
      
      return (
-       <div className="flex flex-col gap-2 bg-white shadow-md p-2 rounded-lg my-2">
+       <div className="flex flex-col gap-2 bg-white shadow-md p-2 rounded-lg my-2 max-w-2xl mx-auto">
          <div className="flex items-center gap-2">
            <input type="checkbox" disabled />
            <input 
@@ -547,14 +671,17 @@ After analyzing the project structure, here's a comprehensive plan for keeping t
              className="w-full border p-2 rounded-md" 
              value={todoBody}
              onChange={(e) => setTodoBody(e.target.value)}
+             onKeyDown={handleKeyDown}
+             disabled={isAdding}
            />
          </div>
          <div className="flex items-center justify-center gap-2">
            <button 
-             className="bg-blue-200 p-2 rounded-sm hover:bg-blue-300 hover:cursor-pointer"
+             className={`bg-blue-200 p-2 rounded-sm hover:bg-blue-300 hover:cursor-pointer ${isAdding ? 'opacity-50' : ''}`}
              onClick={handleAddTodo}
+             disabled={isAdding}
            >
-             Add
+             {isAdding ? 'Adding...' : 'Add'}
            </button>
          </div>
        </div>
