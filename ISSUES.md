@@ -232,3 +232,335 @@ https://tanstack.com/router/latest/docs/framework/react/installation
    ```
    The router plugin will automatically generate the route tree file (`src/routeTree.gen.ts`) based on your route files.
 
+
+# State management
+How do I keep my todos displayed on the UI in sync with todos in the database. Please analyze the project structure starting with todo.tsx route and come up with a plan. Please summarize your plan in the section below, called Keeping remote and local state in sync
+
+## Keeping remote and local state in sync:
+
+After analyzing the project structure, here's a comprehensive plan for keeping todos in the UI synchronized with the database:
+
+1. **Use React Query (TanStack Query)** for server state management:
+   - Implement a centralized data fetching and caching layer
+   - Automatically handle invalidation and refetching on mutations
+   - Provide loading and error states for better UX
+
+2. **Create a custom hook for todos management**:
+   - Encapsulate all todo-related operations (fetch, create, update, delete)
+   - Handle optimistic updates for immediate UI feedback
+   - Leverage React Query's mutation capabilities
+
+3. **Implement a context provider** for shared state:
+   - Make todo state and operations accessible throughout the component tree
+   - Simplify prop passing between components
+
+4. **Add proper mutation handling**:
+   - Update NewTodoCard to use mutations that automatically invalidate queries
+   - Implement edit and delete functionality in TodoCard with proper UI updates
+   - Add optimistic UI updates for a smoother user experience
+
+5. **Specific implementation steps**:
+   - Install required packages: `pnpm add @tanstack/react-query`
+   - Set up Query Client Provider in the application root:
+   ```tsx
+   // src/main.tsx or equivalent entry point
+   import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+   import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+   
+   const queryClient = new QueryClient()
+   
+   // Wrap app with QueryClientProvider
+   root.render(
+     <StrictMode>
+       <QueryClientProvider client={queryClient}>
+         <RouterProvider router={router} />
+         {process.env.NODE_ENV === 'development' && <ReactQueryDevtools />}
+       </QueryClientProvider>
+     </StrictMode>
+   )
+   ```
+   
+   - Create a TodoContext and Provider in `src/contexts/todo-context.tsx`:
+   ```tsx
+   import { createContext, useContext, ReactNode } from 'react'
+   import { Todo } from '../interfaces/todo-interface'
+   import { useTodos } from '../hooks/use-todos'
+   
+   type TodoContextType = {
+     todos: Todo[]
+     isLoading: boolean
+     isError: boolean
+     addTodo: (todo: Omit<Todo, 'id'>) => Promise<Todo>
+     updateTodo: (todo: Todo) => Promise<Todo>
+     deleteTodo: (id: string) => Promise<void>
+     toggleComplete: (id: string, isCompleted: boolean) => Promise<Todo>
+   }
+   
+   const TodoContext = createContext<TodoContextType | undefined>(undefined)
+   
+   export function TodoProvider({ children }: { children: ReactNode }) {
+     const todoOperations = useTodos()
+     
+     return (
+       <TodoContext.Provider value={todoOperations}>
+         {children}
+       </TodoContext.Provider>
+     )
+   }
+   
+   export function useTodoContext() {
+     const context = useContext(TodoContext)
+     if (context === undefined) {
+       throw new Error('useTodoContext must be used within a TodoProvider')
+     }
+     return context
+   }
+   ```
+   
+   - Implement the useTodos hook in `src/hooks/use-todos.ts`:
+   ```tsx
+   import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+   import { Todo } from '../interfaces/todo-interface'
+   
+   // API functions
+   const fetchTodos = async (): Promise<Todo[]> => {
+     const response = await fetch('/api/')
+     if (!response.ok) throw new Error('Failed to fetch todos')
+     return response.json()
+   }
+   
+   const createTodo = async (todo: Omit<Todo, 'id'>): Promise<Todo> => {
+     const response = await fetch('/api/', {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/json' },
+       body: JSON.stringify([todo]),
+     })
+     if (!response.ok) throw new Error('Failed to create todo')
+     const data = await response.json()
+     return data[0] // Assuming API returns array of created todos
+   }
+   
+   const updateTodoApi = async (todo: Todo): Promise<Todo> => {
+     const response = await fetch(`/api/${todo.id}`, {
+       method: 'PUT',
+       headers: { 'Content-Type': 'application/json' },
+       body: JSON.stringify(todo),
+     })
+     if (!response.ok) throw new Error('Failed to update todo')
+     return response.json()
+   }
+   
+   const deleteTodoApi = async (id: string): Promise<void> => {
+     const response = await fetch(`/api/${id}`, { method: 'DELETE' })
+     if (!response.ok) throw new Error('Failed to delete todo')
+   }
+   
+   export function useTodos() {
+     const queryClient = useQueryClient()
+     const todosQuery = useQuery({
+       queryKey: ['todos'],
+       queryFn: fetchTodos,
+     })
+     
+     const addTodoMutation = useMutation({
+       mutationFn: createTodo,
+       onSuccess: () => {
+         queryClient.invalidateQueries({ queryKey: ['todos'] })
+       },
+     })
+     
+     const updateTodoMutation = useMutation({
+       mutationFn: updateTodoApi,
+       onSuccess: () => {
+         queryClient.invalidateQueries({ queryKey: ['todos'] })
+       },
+     })
+     
+     const deleteTodoMutation = useMutation({
+       mutationFn: deleteTodoApi,
+       onSuccess: () => {
+         queryClient.invalidateQueries({ queryKey: ['todos'] })
+       },
+     })
+     
+     const toggleComplete = async (id: string, isCompleted: boolean) => {
+       const todoToUpdate = todosQuery.data?.find(todo => todo.id === id)
+       if (!todoToUpdate) throw new Error('Todo not found')
+       
+       return updateTodoMutation.mutateAsync({
+         ...todoToUpdate,
+         is_completed: isCompleted
+       })
+     }
+     
+     return {
+       todos: todosQuery.data || [],
+       isLoading: todosQuery.isLoading,
+       isError: todosQuery.isError,
+       addTodo: addTodoMutation.mutateAsync,
+       updateTodo: updateTodoMutation.mutateAsync,
+       deleteTodo: deleteTodoMutation.mutateAsync,
+       toggleComplete,
+     }
+   }
+   ```
+   
+   - Refactor the todo route component in `src/routes/todo.tsx`:
+   ```tsx
+   import { createFileRoute } from '@tanstack/react-router'
+   import TodoList from '../app-components/app-todo-list'
+   import { TodoProvider } from '../contexts/todo-context'
+   
+   export const Route = createFileRoute('/todo')({ 
+     component: TodoComponent,
+   })
+   
+   function TodoComponent() {
+     return (
+       <TodoProvider>
+         <TodoList />
+       </TodoProvider>
+     )
+   }
+   ```
+   
+   - Update TodoList component in `src/app-components/app-todo-list.tsx`:
+   ```tsx
+   import TodoCard from './app-todo-card'
+   import NewTodoCard from './app-new-todo'
+   import { useTodoContext } from '../contexts/todo-context'
+   
+   export default function TodoList() {
+     const { todos, isLoading, isError } = useTodoContext()
+     
+     if (isLoading) return <div className="text-center p-4">Loading todos...</div>
+     if (isError) return <div className="text-center p-4 text-red-500">Error loading todos!</div>
+     
+     return (
+       <> 
+         <h1 className="flex justify-center mt-4">Todo List</h1>
+         <NewTodoCard />
+         <div className="w-[90vw] mx-auto bg-white rounded-lg shadow-md p-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+           {todos.map((todo) => (
+             <TodoCard key={todo.id} todo={todo} />
+           ))}
+         </div>
+       </>
+     )
+   }
+   ```
+   
+   - Enhance the TodoCard component in `src/app-components/app-todo-card.tsx`:
+   ```tsx
+   import { useState } from 'react'
+   import { Todo } from '../interfaces/todo-interface'
+   import { useTodoContext } from '../contexts/todo-context'
+   
+   export default function TodoCard({ todo }: { todo: Todo }) {
+     const { updateTodo, deleteTodo, toggleComplete } = useTodoContext()
+     const [isEditing, setIsEditing] = useState(false)
+     const [editedBody, setEditedBody] = useState(todo.body)
+     
+     const handleToggleComplete = () => {
+       toggleComplete(todo.id, !todo.is_completed)
+     }
+     
+     const handleDelete = () => {
+       deleteTodo(todo.id)
+     }
+     
+     const handleEdit = () => {
+       if (isEditing) {
+         updateTodo({ ...todo, body: editedBody })
+       }
+       setIsEditing(!isEditing)
+     }
+     
+     return (
+       <div className="flex flex-col gap-2 bg-white shadow-md p-2 rounded-lg my-2">
+         <div className="flex items-center gap-2">
+           <input 
+             type="checkbox" 
+             checked={todo.is_completed} 
+             onChange={handleToggleComplete}
+           />
+           {isEditing ? (
+             <input 
+               type="text" 
+               value={editedBody} 
+               onChange={(e) => setEditedBody(e.target.value)}
+               className="w-full border p-1 rounded"
+             />
+           ) : (
+             <span className={todo.is_completed ? "text-slate-300" : ""}>{todo.body}</span>
+           )}
+         </div>
+         <div className="flex items-center justify-center gap-2">
+           <button 
+             className="bg-blue-100 p-2 rounded-sm hover:bg-blue-200 hover:cursor-pointer"
+             onClick={handleEdit}
+           >
+             {isEditing ? 'Save' : 'Edit'}
+           </button>
+           <button 
+             className="bg-amber-500 p-2 rounded-sm hover:bg-amber-600 hover:cursor-pointer"
+             onClick={handleDelete}
+           >
+             Delete
+           </button>
+         </div>
+       </div>
+     )
+   }
+   ```
+   
+   - Update the NewTodoCard component in `src/app-components/app-new-todo.tsx`:
+   ```tsx
+   import { useState } from 'react'
+   import { useTodoContext } from '../contexts/todo-context'
+   
+   export default function NewTodoCard() {
+     const { addTodo } = useTodoContext()
+     const [todoBody, setTodoBody] = useState('')
+     
+     const handleAddTodo = async () => {
+       if (!todoBody.trim()) return
+       
+       try {
+         await addTodo({
+           body: todoBody,
+           is_completed: false
+         })
+         setTodoBody('') // Clear input after successful add
+       } catch (error) {
+         console.error('Failed to add todo:', error)
+       }
+     }
+     
+     return (
+       <div className="flex flex-col gap-2 bg-white shadow-md p-2 rounded-lg my-2">
+         <div className="flex items-center gap-2">
+           <input type="checkbox" disabled />
+           <input 
+             type="text" 
+             placeholder="Add new todo" 
+             className="w-full border p-2 rounded-md" 
+             value={todoBody}
+             onChange={(e) => setTodoBody(e.target.value)}
+           />
+         </div>
+         <div className="flex items-center justify-center gap-2">
+           <button 
+             className="bg-blue-200 p-2 rounded-sm hover:bg-blue-300 hover:cursor-pointer"
+             onClick={handleAddTodo}
+           >
+             Add
+           </button>
+         </div>
+       </div>
+     )
+   }
+   ```
+
+This approach will ensure that todos displayed in the UI stay in sync with the database by centralizing the state management and automatically handling refetching after mutations. It also provides a clean architecture that separates concerns and makes the code more maintainable.
+

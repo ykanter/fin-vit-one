@@ -7,7 +7,7 @@ const app = new Hono<{ Bindings: Env }>();
 app.get("/api/", async (c : Context<{ Bindings: Env }>) => {
    //const connectionString = c.env.hyper.connectionString;
    const connectionString = "postgresql://neondb_owner:npg_3rjfOClvGP2V@ep-wandering-sun-a5pta77k-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require"
-   
+
    const sql = postgres(connectionString, {
         // Workers limit the number of concurrent external connections, so be sure to limit
         // the size of the local connection pool that postgres.js may establish.
@@ -34,6 +34,38 @@ app.get("/api/", async (c : Context<{ Bindings: Env }>) => {
           { status: 500 },
         );
       }
+});
+app.post("/api/", async (c : Context<{ Bindings: Env }>) => {
+  const connectionString = "postgresql://neondb_owner:npg_3rjfOClvGP2V@ep-wandering-sun-a5pta77k-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require" 
+  const sql = postgres(connectionString, {
+        // Workers limit the number of concurrent external connections, so be sure to limit
+        // the size of the local connection pool that postgres.js may establish.
+        max: 5,
+  
+        // If you are not using array types in your Postgres schema,
+        // disabling this will save you an extra round-trip every time you connect.
+        fetch_types: false,
+        
+    });
+    const todoArray = await c.req.json()
+    for (const newTodo of todoArray) {
+        const { body } = newTodo;
+        const todo : Todo = {
+            body,
+            is_completed: false
+        }
+    try {
+        await sql`INSERT INTO todo (body, is_completed) VALUES (${todo.body}, ${todo.is_completed})`;
+        c.executionCtx.waitUntil(sql.end());
+        return Response.json({message: "Todo added successfully"});
+    } catch (e) {
+        console.error(e);
+        return Response.json(
+            { error: e instanceof Error ? e.message : e },
+            { status: 500 },
+        );
+    }
+  }
 });
 
 export default app;
