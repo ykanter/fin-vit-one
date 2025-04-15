@@ -68,4 +68,51 @@ app.post("/api/", async (c : Context<{ Bindings: Env }>) => {
   }
 });
 
+app.put("/api/:todoId", async (c : Context<{ Bindings: Env }>) => {
+  const connectionString = "postgresql://neondb_owner:npg_3rjfOClvGP2V@ep-wandering-sun-a5pta77k-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require"
+
+  const sql = postgres(connectionString, {
+    max: 5,
+    fetch_types: false,
+  });
+  const todoId = c.req.param("todoId");
+  const todoJson = await c.req.json();
+  const { body } = todoJson;
+  const todo : Todo = {
+    body,
+    is_completed: false
+  };
+  try {
+    await sql`UPDATE todo SET body = ${todo.body}, is_completed = ${todo.is_completed} WHERE id = ${todoId}`;
+    c.executionCtx.waitUntil(sql.end());
+    return Response.json({ message: "Todo updated successfully" });
+  } catch (e) {
+    console.error(e);
+    return Response.json(
+      { error: e instanceof Error ? e.message : e },
+      { status: 500 },
+    );
+  }
+});
+app.delete("/api/:todoId  ", async (c : Context<{ Bindings: Env }>) => {
+  const connectionString = "postgresql://neondb_owner:npg_3rjfOClvGP2V@ep-wandering-sun-a5pta77k-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require"
+
+  const sql = postgres(connectionString, {
+    max: 5,
+    fetch_types: false,
+  });
+  const todoId = c.req.param("todoId");
+  try {
+    await sql`DELETE FROM todo WHERE id = ${todoId}`;
+    c.executionCtx.waitUntil(sql.end());
+    return Response.json({ message: "Todo deleted successfully" });
+  } catch (e) {
+    console.error(e);
+    return Response.json(
+      { error: e instanceof Error ? e.message : e },
+      { status: 500 },
+    );
+  }
+})
+
 export default app;
